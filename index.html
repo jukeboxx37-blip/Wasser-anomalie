@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Wasserstoffbrücken – Simulation</title>
+<style>
+  :root {
+    --blau: #1a3a5c;
+    --hellblau: #2d7dd2;
+    --akzent: #f0a500;
+    --rot: #e84855;
+    --gruen: #3bb273;
+    --bg: #f4f7fb;
+    --karte: #ffffff;
+    --text: #1a2a3a;
+    --grau: #7a8fa6;
+    --border: #d0dce8;
+    --tab-inaktiv: #e2eaf3;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Georgia', serif; background: var(--bg); color: var(--text); min-height: 100vh; overscroll-behavior: none; }
+
+  header { background: var(--blau); color: white; padding: 14px 20px 12px; text-align: center; }
+  header h1 { font-size: 1.15rem; letter-spacing: 0.04em; font-weight: normal; }
+  header p { font-size: 0.78rem; opacity: 0.7; margin-top: 3px; font-style: italic; }
+
+  .tabs { display: flex; background: var(--blau); padding: 0 12px; gap: 6px; }
+  .tab-btn { flex: 1; padding: 10px 6px; background: var(--tab-inaktiv); border: none; border-radius: 8px 8px 0 0; font-size: 0.82rem; font-family: inherit; color: var(--blau); cursor: pointer; font-weight: bold; transition: background 0.2s; line-height: 1.2; }
+  .tab-btn.aktiv { background: var(--bg); color: var(--blau); }
+  .tab-btn span { font-size: 0.7rem; display: block; font-weight: normal; opacity: 0.7; }
+
+  .tab-panel { display: none; padding: 16px; }
+  .tab-panel.aktiv { display: block; }
+
+  .karte { background: var(--karte); border-radius: 12px; padding: 16px; margin-bottom: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border: 1px solid var(--border); }
+  .karte h2 { font-size: 0.95rem; color: var(--blau); margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid var(--akzent); display: flex; align-items: center; gap: 8px; }
+  .karte h2 .icon { font-size: 1.1rem; }
+
+  .aufgabe { background: #fff8e7; border-left: 4px solid var(--akzent); border-radius: 0 8px 8px 0; padding: 10px 14px; margin-bottom: 14px; font-size: 0.85rem; line-height: 1.5; }
+  .aufgabe strong { color: var(--blau); }
+
+  .info { background: #e8f4fd; border-left: 4px solid var(--hellblau); border-radius: 0 8px 8px 0; padding: 10px 14px; font-size: 0.82rem; line-height: 1.5; color: #1a3a5c; margin-bottom: 12px; }
+
+  .slider-wrap { margin: 12px 0; }
+  .slider-wrap label { font-size: 0.82rem; color: var(--grau); display: block; margin-bottom: 6px; }
+  .slider-wrap input[type=range] { width: 100%; height: 6px; border-radius: 3px; appearance: none; background: linear-gradient(to right, var(--hellblau) 0%, var(--hellblau) var(--val,50%), var(--border) var(--val,50%)); outline: none; cursor: pointer; }
+  .slider-wrap input[type=range]::-webkit-slider-thumb { appearance: none; width: 28px; height: 28px; border-radius: 50%; background: var(--hellblau); border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; }
+  .wert-anzeige { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+  .wert-gross { font-size: 1.5rem; font-weight: bold; color: var(--hellblau); }
+  .wert-einheit { font-size: 0.8rem; color: var(--grau); }
+
+  canvas { width: 100%; border-radius: 8px; display: block; touch-action: none; }
+
+  .mol-wrap { position: relative; border-radius: 10px; overflow: hidden; background: #0d1b2a; margin-bottom: 10px; }
+
+  .legende { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .legende-item { display: flex; align-items: center; gap: 5px; font-size: 0.78rem; color: var(--grau); }
+  .legende-farbe { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+
+  .zustand-anzeige { display: flex; align-items: center; justify-content: space-between; background: #1a2a3a; border-radius: 10px; padding: 10px 16px; margin-bottom: 10px; }
+  .zustand-label { font-size: 0.85rem; color: white; font-weight: bold; }
+  .zustand-badge { padding: 5px 14px; border-radius: 20px; font-size: 0.82rem; font-weight: bold; transition: background 0.3s, color 0.3s; }
+
+  .btn-gruppe { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+  .btn-toggle { flex: 1; min-width: 80px; padding: 8px 12px; border: 2px solid var(--border); border-radius: 8px; background: white; font-size: 0.82rem; font-family: inherit; cursor: pointer; color: var(--grau); transition: all 0.15s; font-weight: bold; }
+  .btn-toggle.aktiv { border-color: var(--hellblau); background: var(--hellblau); color: white; }
+
+  /* H-Brücken-Erklärung Layout */
+  .hb-schema { background: #0d1b2a; border-radius: 10px; margin-bottom: 12px; }
+
+  /* Beschriftungs-Tabelle */
+  .erklaer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+  .erklaer-box { border-radius: 8px; padding: 10px 12px; font-size: 0.8rem; line-height: 1.5; }
+  .erklaer-box h4 { font-size: 0.82rem; margin-bottom: 4px; }
+  .erklaer-box.rot-box { background: #fde8ea; border: 1px solid #e84855; }
+  .erklaer-box.blau-box { background: #e8f0fd; border: 1px solid #2d7dd2; }
+  .erklaer-box.gruen-box { background: #e8f7ef; border: 1px solid #3bb273; }
+  .erklaer-box.orange-box { background: #fff3e0; border: 1px solid #f0a500; }
+
+  /* Fazit-Karte */
+  .fazit { background: linear-gradient(135deg, #e8f4fd 0%, #e8f7ef 100%); border: 2px solid var(--gruen); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; line-height: 1.7; margin: 10px 0; }
+  .fazit strong { color: var(--blau); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Wasserstoffbrückenbindungen</h1>
+  <p>Interaktive Simulation – Chemie Klasse 9</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn aktiv" onclick="zeigeTab(0)" id="tab0">Modul 1<span>Phänomen</span></button>
+  <button class="tab-btn" onclick="zeigeTab(1)" id="tab1">Modul 2<span>Molekülebene</span></button>
+</div>
+
+<!-- ===================== TAB 1: PHÄNOMEN ===================== -->
+<div class="tab-panel aktiv" id="panel0">
+
+  <div class="aufgabe">
+    <strong>Aufgabe 1:</strong> Bewege den Regler und beobachte, wie sich die Dichte von Wasser mit der Temperatur verändert.<br>
+    <strong>Aufgabe 2:</strong> Vergleiche Wasser mit einer „normalen" Substanz. Was fällt auf?
+  </div>
+
+  <div class="karte">
+    <h2><span class="icon">🌡️</span> Dichte von Wasser und Temperatur</h2>
+    <div class="slider-wrap">
+      <label>Temperatur einstellen:</label>
+      <input type="range" id="tempSlider" min="0" max="20" value="10" step="0.5" oninput="aktualisiereTemp(this.value)">
+      <div class="wert-anzeige">
+        <div><span class="wert-gross" id="tempAnzeige">10,0</span><span class="wert-einheit"> °C</span></div>
+        <div style="text-align:right"><span class="wert-gross" id="dichteAnzeige">999,70</span><span class="wert-einheit"> g/L</span></div>
+      </div>
+    </div>
+    <canvas id="dichteCanvas" height="220"></canvas>
+    <div class="legende">
+      <div class="legende-item"><div class="legende-farbe" style="background:#2d7dd2"></div><span>Wasser (H₂O)</span></div>
+      <div class="legende-item"><div class="legende-farbe" style="background:#e84855; opacity:0.5"></div><span>Normale Substanz (Vergleich)</span></div>
+      <div class="legende-item"><div class="legende-farbe" style="background:#f0a500"></div><span>Aktuelle Temperatur</span></div>
+    </div>
+  </div>
+
+  <div class="karte">
+    <h2><span class="icon">🧊</span> Was passiert beim Gefrieren?</h2>
+    <div class="btn-gruppe">
+      <button class="btn-toggle aktiv" onclick="zeigeZustand('fluessig',this)">💧 Flüssig (~4°C)</button>
+      <button class="btn-toggle" onclick="zeigeZustand('gefrierend',this)">❄️ Beim Gefrieren</button>
+      <button class="btn-toggle" onclick="zeigeZustand('fest',this)">🧊 Eis (0°C)</button>
+    </div>
+    <canvas id="zustandCanvas" height="180"></canvas>
+    <div id="zustandText" class="info">Bei etwa 4°C hat Wasser seine höchste Dichte. Die Moleküle sind am dichtesten gepackt.</div>
+  </div>
+
+  <div class="karte">
+    <h2><span class="icon">📝</span> Meine Beobachtungen</h2>
+    <p style="font-size:0.82rem; color:var(--grau); margin-bottom:8px;">Halte hier deine wichtigsten Beobachtungen fest:</p>
+    <p style="font-size:0.83rem; margin-bottom:6px;">Das Dichtemaximum von Wasser liegt bei ca. <strong>______ °C</strong>.</p>
+    <p style="font-size:0.83rem; margin-bottom:6px;">Im Vergleich zur normalen Substanz ist der Verlauf <strong>____________________</strong>.</p>
+    <p style="font-size:0.83rem; margin-bottom:6px;">Wenn Wasser gefriert, wird es <strong>□ dichter &nbsp;□ weniger dicht</strong>.</p>
+    <p style="font-size:0.83rem;">Deshalb schwimmt Eis auf Wasser, weil <strong>____________________</strong>.</p>
+  </div>
+</div>
+
+<!-- ===================== TAB 2: MOLEKÜLEBENE ===================== -->
+<div class="tab-panel" id="panel1">
+
+  <div class="aufgabe">
+    <strong>Aufgabe 3:</strong> Betrachte die Abbildung und erkläre, was eine Wasserstoffbrückenbindung ist.<br>
+    <strong>Aufgabe 4:</strong> Bewege den Regler und beobachte, wie sich die Anordnung der Moleküle beim Schmelzen verändert. Erkläre damit, warum Eis schwimmt.
+  </div>
+
+  <!-- TEIL A: H-Brücke Erklärung -->
+  <div class="karte">
+    <h2><span class="icon">🔗</span> Die Wasserstoffbrückenbindung</h2>
+    <div class="info">
+      Zur Erinnerung: Sauerstoff (O) ist stark <strong>elektronegativ</strong> – er zieht die Elektronen der O–H-Bindungen zu sich hin. Dadurch entstehen Partialladungen (δ+, δ−).
+    </div>
+
+    <div class="hb-schema">
+      <canvas id="hbErklaerCanvas" height="240"></canvas>
+    </div>
+
+    <div class="erklaer-grid">
+      <div class="erklaer-box rot-box">
+        <h4>🔴 Sauerstoff (O)</h4>
+        Trägt eine <strong>negative Partialladung (δ−)</strong>, weil er die Elektronen stärker anzieht. Besitzt <strong>freie Elektronenpaare</strong>.
+      </div>
+      <div class="erklaer-box blau-box">
+        <h4>⚪ Wasserstoff (H)</h4>
+        Trägt eine <strong>positive Partialladung (δ+)</strong>, weil seine Elektronen zum O gezogen werden.
+      </div>
+      <div class="erklaer-box gruen-box">
+        <h4>🟢 H-Brücke (---)</h4>
+        Entsteht zwischen dem <strong>δ+ am H</strong> eines Moleküls und dem <strong>freien Elektronenpaar am O</strong> des Nachbarmoleküls.
+      </div>
+      <div class="erklaer-box orange-box">
+        <h4>⚡ Bedingung</h4>
+        H muss an ein stark <strong>elektronegativos Atom</strong> gebunden sein: <strong>F, O oder N</strong>.
+      </div>
+    </div>
+
+    <div class="fazit">
+      <strong>Merke:</strong> Wasserstoffbrücken sind <strong>stärker</strong> als normale Keesom-Wechselwirkungen (Dipol–Dipol), aber <strong>schwächer</strong> als kovalente Bindungen. Sie entstehen nur, wenn H an <strong>F, O oder N</strong> gebunden ist.
+    </div>
+  </div>
+
+  <!-- TEIL B: Schmelz-Simulation -->
+  <div class="karte">
+    <h2><span class="icon">🧊→💧</span> Vom Eis zum Wasser – molekulare Sicht</h2>
+
+    <div class="zustand-anzeige">
+      <div>
+        <div class="zustand-label" id="zustandLabel">Eis (0°C)</div>
+        <div style="font-size:0.75rem; color:#aac8e8; margin-top:2px" id="dichteLabel">Dichte: ~917 g/L</div>
+      </div>
+      <div class="zustand-badge" id="zustandBadge" style="background:#3bb273; color:white">🧊 Fest</div>
+    </div>
+
+    <div class="mol-wrap">
+      <canvas id="schmelzCanvas" height="280"></canvas>
+    </div>
+
+    <div class="slider-wrap">
+      <label>Temperatur:</label>
+      <input type="range" id="schmelzSlider" min="-5" max="30" value="-5" step="1"
+        oninput="aktualisiereSchmelze(this.value)">
+      <div class="wert-anzeige">
+        <span style="font-size:0.82rem; color:var(--grau)">−5°C</span>
+        <span class="wert-gross" id="schmelzTempAnzeige">−5</span><span class="wert-einheit"> °C</span>
+        <span style="font-size:0.82rem; color:var(--grau)">30°C</span>
+      </div>
+    </div>
+
+    <div id="schmelzInfo" class="info">
+      Im <strong>Eis</strong> sind alle Moleküle durch H-Brücken in einem hexagonalen Gitter fixiert. Die <strong>Hohlräume</strong> machen Eis weniger dicht als Wasser.
+    </div>
+
+    <div class="legende">
+      <div class="legende-item"><div class="legende-farbe" style="background:#e84855"></div><span>Sauerstoff (O, δ−)</span></div>
+      <div class="legende-item"><div class="legende-farbe" style="background:#7aaad0"></div><span>Wasserstoff (H, δ+)</span></div>
+      <div class="legende-item" style="align-items:center">
+        <div style="width:22px; height:0; border-top:2px dashed rgba(100,200,255,0.85); flex-shrink:0"></div>
+        <span>Wasserstoffbrücke</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="karte">
+    <h2><span class="icon">📝</span> Meine Erkenntnisse</h2>
+    <p style="font-size:0.83rem; margin-bottom:6px;">Eine H-Brücke entsteht zwischen dem <strong>δ+</strong> am H eines Moleküls und dem <strong>______</strong> am O des Nachbarmoleküls.</p>
+    <p style="font-size:0.83rem; margin-bottom:6px;">Bedingung: H muss an <strong>______</strong> gebunden sein.</p>
+    <p style="font-size:0.83rem; margin-bottom:6px;">Im Eis sind die Moleküle durch H-Brücken in einem <strong>____________________</strong> Gitter angeordnet.</p>
+    <p style="font-size:0.83rem; margin-bottom:6px;">Beim Schmelzen bricht das Gitter auf → die Moleküle rücken <strong>□ weiter auseinander &nbsp;□ näher zusammen</strong>.</p>
+    <p style="font-size:0.83rem;">Deshalb ist Eis <strong>□ dichter &nbsp;□ weniger dicht</strong> als flüssiges Wasser → Eis schwimmt.</p>
+  </div>
+
+</div>
+
+<script>
+// ==================== HILFSFUNKTIONEN ====================
+function dpr() { return Math.min(window.devicePixelRatio || 1, 2); }
+
+function setupCanvas(canvas) {
+  const d = dpr();
+  const w = canvas.parentElement.clientWidth || 320;
+  const cssH = parseInt(canvas.getAttribute('height'));
+  canvas.width = w * d;
+  canvas.height = cssH * d;
+  canvas.style.width = w + 'px';
+  canvas.style.height = cssH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(d, d);
+  return { ctx, w, h: cssH };
+}
+
+// ==================== DICHTE DATEN ====================
+const dichteWasser = [
+  999.84,999.90,999.94,999.96,999.97,999.96,999.94,999.90,
+  999.85,999.78,999.70,999.60,999.50,999.38,999.24,999.10,
+  998.94,998.77,998.60,998.40,998.20
+];
+function getDichte(temp) {
+  const i = Math.floor(temp), f = temp - i;
+  if (i >= 20) return dichteWasser[20];
+  return dichteWasser[i] * (1-f) + dichteWasser[Math.min(i+1,20)] * f;
+}
+function getNormalDichte(temp) { return 990 + (20 - temp) * 0.5; }
+
+// ==================== TAB ====================
+function zeigeTab(idx) {
+  document.querySelectorAll('.tab-panel').forEach((p,i) => p.classList.toggle('aktiv', i===idx));
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('aktiv', i===idx));
+  setTimeout(() => {
+    if (idx===0) { zeichneDichteKurve(parseFloat(document.getElementById('tempSlider').value)); zeichneZustandsMolekuele(aktuellerZustand); }
+    if (idx===1) { zeichneHBErklaerung(); aktualisiereSchmelze(schmelzTemp); if(!schmelzAnimId) schmelzLoop(); }
+  }, 50);
+}
+
+// ==================== MODUL 1 ====================
+let aktuelleTemp = 10;
+
+function aktualisiereTemp(val) {
+  aktuelleTemp = parseFloat(val);
+  const pct = (aktuelleTemp / 20) * 100;
+  document.getElementById('tempSlider').style.setProperty('--val', pct+'%');
+  document.getElementById('tempAnzeige').textContent = aktuelleTemp.toFixed(1).replace('.',',');
+  document.getElementById('dichteAnzeige').textContent = getDichte(aktuelleTemp).toFixed(2).replace('.',',');
+  zeichneDichteKurve(aktuelleTemp);
+}
+
+function zeichneDichteKurve(temp) {
+  const canvas = document.getElementById('dichteCanvas');
+  const { ctx, w, h } = setupCanvas(canvas);
+  const pad = { l:52, r:16, t:18, b:36 };
+  const cw = w-pad.l-pad.r, ch = h-pad.t-pad.b;
+  const yMin=997.5, yMax=1000.2;
+
+  ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,w,h);
+
+  // Gitternetz
+  for (let d=998; d<=1000; d+=0.5) {
+    const y = pad.t+ch-((d-yMin)/(yMax-yMin))*ch;
+    ctx.strokeStyle='#e8eef4'; ctx.lineWidth=0.5;
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+cw,y); ctx.stroke();
+    ctx.fillStyle='#7a8fa6'; ctx.font='10px Georgia'; ctx.textAlign='right';
+    ctx.fillText(d.toFixed(1), pad.l-5, y+3);
+  }
+  for (let t=0; t<=20; t+=5) {
+    const x = pad.l+(t/20)*cw;
+    ctx.fillStyle='#7a8fa6'; ctx.font='10px Georgia'; ctx.textAlign='center';
+    ctx.fillText(t+'°C', x, pad.t+ch+18);
+  }
+  ctx.strokeStyle='#c0cdd8'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+ch); ctx.lineTo(pad.l+cw,pad.t+ch); ctx.stroke();
+
+  ctx.save(); ctx.translate(12,pad.t+ch/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center'; ctx.font='9px Georgia'; ctx.fillStyle='#7a8fa6'; ctx.fillText('Dichte (g/L)',0,0); ctx.restore();
+
+  // Normale Substanz
+  ctx.strokeStyle='rgba(232,72,85,0.45)'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+  ctx.beginPath();
+  for (let t=0; t<=20; t+=0.5) {
+    const x=pad.l+(t/20)*cw, y=pad.t+ch-((getNormalDichte(t)-yMin)/(yMax-yMin))*ch;
+    t===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.stroke(); ctx.setLineDash([]);
+
+  // Wasser
+  ctx.strokeStyle='#2d7dd2'; ctx.lineWidth=3;
+  ctx.beginPath();
+  for (let t=0; t<=20; t+=0.2) {
+    const x=pad.l+(t/20)*cw, y=pad.t+ch-((getDichte(t)-yMin)/(yMax-yMin))*ch;
+    t===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // Maximum
+  const xM=pad.l+(4/20)*cw, yM=pad.t+ch-((getDichte(4)-yMin)/(yMax-yMin))*ch;
+  ctx.strokeStyle='#f0a500'; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(xM,pad.t); ctx.lineTo(xM,pad.t+ch); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle='#f0a500'; ctx.beginPath(); ctx.arc(xM,yM,5,0,Math.PI*2); ctx.fill();
+  ctx.font='bold 9px Georgia'; ctx.textAlign='left'; ctx.fillText('4°C',xM+5,yM-4);
+
+  // Aktuelle Temp
+  const xT=pad.l+(temp/20)*cw, dT=getDichte(temp), yT=pad.t+ch-((dT-yMin)/(yMax-yMin))*ch;
+  ctx.strokeStyle='#f0a500'; ctx.lineWidth=1.5; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(xT,pad.t+ch); ctx.lineTo(xT,yT); ctx.moveTo(pad.l,yT); ctx.lineTo(xT,yT); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle='#f0a500'; ctx.beginPath(); ctx.arc(xT,yT,7,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='white'; ctx.lineWidth=2; ctx.stroke();
+}
+
+let aktuellerZustand = 'fluessig';
+function zeigeZustand(z,btn) {
+  aktuellerZustand=z;
+  document.querySelectorAll('#panel0 .btn-toggle').forEach(b=>b.classList.remove('aktiv')); btn.classList.add('aktiv');
+  const texte = {
+    fluessig:'Bei etwa 4°C hat Wasser seine höchste Dichte. Die Moleküle können sich frei bewegen und sind dicht gepackt.',
+    gefrierend:'Unter 4°C beginnen Wasserstoffbrücken, die Moleküle in eine geordnete Struktur zu zwingen. Die Dichte nimmt dabei <strong>ab</strong>.',
+    fest:'Im Eis fixieren H-Brücken alle Moleküle in einem offenen, hexagonalen Gitter mit vielen Hohlräumen → Eis ist <strong>weniger dicht</strong>.'
+  };
+  document.getElementById('zustandText').innerHTML = texte[z];
+  zeichneZustandsMolekuele(z);
+}
+
+function zeichneZustandsMolekuele(z) {
+  const canvas = document.getElementById('zustandCanvas');
+  const { ctx, w, h } = setupCanvas(canvas);
+  ctx.fillStyle='#0d1b2a'; ctx.fillRect(0,0,w,h);
+  let pos=[];
+  if (z==='fluessig') {
+    for (let i=0;i<20;i++) pos.push({x:28+(i%5)*44+(Math.floor(i/5)%2)*18+(Math.random()-0.5)*6,y:25+Math.floor(i/5)*44+(Math.random()-0.5)*6,a:Math.random()*Math.PI*2});
+  } else if (z==='gefrierend') {
+    for (let i=0;i<15;i++) pos.push({x:30+(i%5)*50+(Math.floor(i/5)%2)*12,y:28+Math.floor(i/5)*58,a:(Math.random()-0.5)*0.5});
+  } else {
+    // Hexagonales Gitter
+    [[35,28],[85,28],[135,28],[185,28],[235,28],
+     [60,68],[110,68],[160,68],[210,68],
+     [35,108],[85,108],[135,108],[185,108],[235,108]].slice(0,Math.min(14,Math.floor(w/45)+3)).forEach((p,i)=>pos.push({x:p[0],y:p[1],a:i%2===0?0:Math.PI/3}));
+  }
+  if (z==='fest') {
+    ctx.strokeStyle='rgba(100,200,255,0.45)'; ctx.lineWidth=1.5; ctx.setLineDash([5,3]);
+    for (let i=0;i<pos.length;i++) for (let j=i+1;j<pos.length;j++) {
+      const dx=pos[j].x-pos[i].x,dy=pos[j].y-pos[i].y;
+      if (Math.sqrt(dx*dx+dy*dy)<68) { ctx.beginPath(); ctx.moveTo(pos[i].x,pos[i].y); ctx.lineTo(pos[j].x,pos[j].y); ctx.stroke(); }
+    }
+    ctx.setLineDash([]);
+  }
+  pos.forEach(p=>zeichneMolKlein(ctx,p.x,p.y,p.a,9));
+  ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.font='10px Georgia'; ctx.textAlign='right';
+  ctx.fillText({fluessig:'ca. 4°C',gefrierend:'0–4°C',fest:'Eis, 0°C'}[z],w-8,h-8);
+}
+
+function zeichneMolKlein(ctx,x,y,a,r) {
+  ctx.fillStyle='#e84855'; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  [[Math.cos(a+0.92),Math.sin(a+0.92)],[Math.cos(a-0.92),Math.sin(a-0.92)]].forEach(([cx2,cy2])=>{
+    const hx=x+r*1.8*cx2,hy=y+r*1.8*cy2;
+    ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(hx,hy); ctx.stroke();
+    ctx.fillStyle='#7aaad0'; ctx.beginPath(); ctx.arc(hx,hy,r*0.62,0,Math.PI*2); ctx.fill();
+  });
+}
+
+// ==================== MODUL 2: H-BRÜCKE ERKLÄRUNG ====================
+function zeichneHBErklaerung() {
+  const canvas = document.getElementById('hbErklaerCanvas');
+  const { ctx, w, h } = setupCanvas(canvas);
+  ctx.fillStyle='#0d1b2a'; ctx.fillRect(0,0,w,h);
+
+  const m1x=w*0.27, m2x=w*0.73, my=h*0.52;
+
+  // ── Molekül 1 (links) ──
+  // O–H Bindungen (H nach rechts-unten und links-unten)
+  const h1 = {x: m1x + 52, y: my + 22};   // rechtes H (zeigt Richtung Molekül 2)
+  const h1L = {x: m1x - 42, y: my + 22};  // linkes H
+
+  [h1, h1L].forEach(hp => {
+    ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(m1x,my); ctx.lineTo(hp.x,hp.y); ctx.stroke();
+  });
+
+  // Freie Elektronenpaare (oben, als Punkte/Bögen)
+  ctx.fillStyle='rgba(100,200,255,0.35)';
+  [[-18,-22],[18,-22]].forEach(([ox,oy])=>{
+    ctx.beginPath(); ctx.ellipse(m1x+ox,my+oy,7,10,0,0,Math.PI*2); ctx.fill();
+  });
+  ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.font='9px Georgia'; ctx.textAlign='center';
+  ctx.fillText('freies EP',m1x,my-36);
+
+  // O1
+  const gO1=ctx.createRadialGradient(m1x-5,my-5,2,m1x,my,20);
+  gO1.addColorStop(0,'#ff7080'); gO1.addColorStop(1,'#c0303c');
+  ctx.fillStyle=gO1; ctx.beginPath(); ctx.arc(m1x,my,20,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='white'; ctx.font='bold 12px Georgia'; ctx.textAlign='center'; ctx.fillText('O',m1x,my+4);
+  ctx.font='11px Georgia'; ctx.fillStyle='#ffaaaa'; ctx.fillText('δ−',m1x-28,my-15);
+
+  // H1 rechts (der zur H-Brücke beiträgt)
+  const gH1=ctx.createRadialGradient(h1.x-3,h1.y-3,1,h1.x,h1.y,13);
+  gH1.addColorStop(0,'#d8ecff'); gH1.addColorStop(1,'#6699cc');
+  ctx.fillStyle=gH1; ctx.beginPath(); ctx.arc(h1.x,h1.y,13,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#0d1b2a'; ctx.font='bold 10px Georgia'; ctx.fillText('H',h1.x,h1.y+4);
+  ctx.fillStyle='#99ccff'; ctx.font='10px Georgia'; ctx.fillText('δ+',h1.x+18,h1.y-6);
+
+  // H1 links
+  const gH1L=ctx.createRadialGradient(h1L.x-3,h1L.y-3,1,h1L.x,h1L.y,13);
+  gH1L.addColorStop(0,'#d8ecff'); gH1L.addColorStop(1,'#6699cc');
+  ctx.fillStyle=gH1L; ctx.beginPath(); ctx.arc(h1L.x,h1L.y,13,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#0d1b2a'; ctx.font='bold 10px Georgia'; ctx.fillText('H',h1L.x,h1L.y+4);
+  ctx.fillStyle='#99ccff'; ctx.font='10px Georgia'; ctx.fillText('δ+',h1L.x-20,h1L.y-6);
+
+  // ── Molekül 2 (rechts) ──
+  const h2R={x:m2x+42,y:my+22};
+  const h2L={x:m2x-50,y:my+22}; // linkes H (zeigt Richtung M1)
+
+  [h2R,h2L].forEach(hp=>{
+    ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(m2x,my); ctx.lineTo(hp.x,hp.y); ctx.stroke();
+  });
+
+  // Freie EP (oben)
+  ctx.fillStyle='rgba(100,200,255,0.35)';
+  [[-18,-22],[18,-22]].forEach(([ox,oy])=>{
+    ctx.beginPath(); ctx.ellipse(m2x+ox,my+oy,7,10,0,0,Math.PI*2); ctx.fill();
+  });
+  // Freies EP LINKS (das die H-Brücke bildet) – hervorgehoben
+  ctx.fillStyle='rgba(100,200,255,0.6)';
+  ctx.beginPath(); ctx.ellipse(m2x-20,my,8,11,-0.3,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(100,200,255,0.9)'; ctx.font='bold 9px Georgia'; ctx.textAlign='left';
+  ctx.fillText('freies EP', m2x-20+12, my+4);
+
+  const gO2=ctx.createRadialGradient(m2x-5,my-5,2,m2x,my,20);
+  gO2.addColorStop(0,'#ff7080'); gO2.addColorStop(1,'#c0303c');
+  ctx.fillStyle=gO2; ctx.beginPath(); ctx.arc(m2x,my,20,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='white'; ctx.font='bold 12px Georgia'; ctx.textAlign='center'; ctx.fillText('O',m2x,my+4);
+  ctx.fillStyle='#ffaaaa'; ctx.font='11px Georgia'; ctx.fillText('δ−',m2x+28,my-15);
+
+  // H2 rechts
+  const gH2R=ctx.createRadialGradient(h2R.x-3,h2R.y-3,1,h2R.x,h2R.y,13);
+  gH2R.addColorStop(0,'#d8ecff'); gH2R.addColorStop(1,'#6699cc');
+  ctx.fillStyle=gH2R; ctx.beginPath(); ctx.arc(h2R.x,h2R.y,13,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#0d1b2a'; ctx.font='bold 10px Georgia'; ctx.fillText('H',h2R.x,h2R.y+4);
+  ctx.fillStyle='#99ccff'; ctx.font='10px Georgia'; ctx.fillText('δ+',h2R.x+18,h2R.y-6);
+
+  // H2 links
+  const gH2L=ctx.createRadialGradient(h2L.x-3,h2L.y-3,1,h2L.x,h2L.y,13);
+  gH2L.addColorStop(0,'#d8ecff'); gH2L.addColorStop(1,'#6699cc');
+  ctx.fillStyle=gH2L; ctx.beginPath(); ctx.arc(h2L.x,h2L.y,13,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#0d1b2a'; ctx.font='bold 10px Georgia'; ctx.fillText('H',h2L.x,h2L.y+4);
+  ctx.fillStyle='#99ccff'; ctx.font='10px Georgia'; ctx.fillText('δ+',h2L.x-20,h2L.y-6);
+
+  // ── H-BRÜCKE (gestrichelt) ──
+  // Von H1 (rechts) nach freiem EP von O2 (links)
+  const hbStartX=h1.x+13, hbStartY=h1.y;
+  const hbEndX=m2x-20-8, hbEndY=my;
+
+  ctx.strokeStyle='rgba(100,210,255,0.9)'; ctx.lineWidth=2.5; ctx.setLineDash([7,4]);
+  ctx.beginPath(); ctx.moveTo(hbStartX,hbStartY); ctx.lineTo(hbEndX,hbEndY); ctx.stroke(); ctx.setLineDash([]);
+
+  // Pfeil-Spitze
+  ctx.fillStyle='rgba(100,210,255,0.9)';
+  ctx.beginPath();
+  ctx.moveTo(hbEndX,hbEndY);
+  ctx.lineTo(hbEndX-10,hbEndY-5);
+  ctx.lineTo(hbEndX-10,hbEndY+5);
+  ctx.fill();
+
+  // Label H-Brücke
+  const midX=(hbStartX+hbEndX)/2, midY=(hbStartY+hbEndY)/2;
+  ctx.fillStyle='rgba(100,210,255,1)'; ctx.font='bold 11px Georgia'; ctx.textAlign='center';
+  ctx.fillText('H-Brücke',midX,midY-14);
+
+  // Anziehungspfeil-Bogen (klein, gebogen)
+  ctx.strokeStyle='rgba(100,210,255,0.5)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(midX,midY+10,22,-0.4,Math.PI+0.4); ctx.stroke();
+
+  // Labels Molekül 1 & 2
+  ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.font='10px Georgia'; ctx.textAlign='center';
+  ctx.fillText('Molekül 1',m1x,h-10);
+  ctx.fillText('Molekül 2',m2x,h-10);
+}
+
+// ==================== SCHMELZ-SIMULATION (Schieberegler) ====================
+// Kernprinzip: Moleküle haben feste Zielpositionen für drei Zustände.
+// Zwischen Zuständen wird interpoliert. Kollisionsvermeidung durch
+// Soft-Repulsion die Moleküle auseinanderhält ohne Durchdringen.
+
+const S3 = Math.sqrt(3);
+
+// Zufallsgenerator mit festem Seed – keine Flickerprobleme
+function mulberry32(s) {
+  return function() {
+    s |= 0; s = s + 0x6D2B79F5 | 0;
+    let t = Math.imul(s ^ s>>>15, 1|s);
+    t = t + Math.imul(t ^ t>>>7, 61|t) ^ t;
+    return ((t ^ t>>>14) >>> 0) / 4294967296;
+  };
+}
+const RNG = mulberry32(137);
+const RV = Array.from({length:4000}, ()=>RNG());
+let rv = 0;
+function r() { return RV[rv++ % RV.length]; }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function smoothstep(t){ t=Math.max(0,Math.min(1,t)); return t*t*(3-2*t); }
+function ease(t){ return smoothstep(smoothstep(t)); }
+
+let schmelzTemp = -5;
+let schmelzMols = null;
+let schmelzAnimId = null;
+let schmelzPhase = 0;
+
+// ── HONEYCOMB-GITTER ──
+// ── EISGITTER nach Referenzbild ──
+// Struktur aus dem Bild: Moleküle wechseln Orientierung.
+// Vier Grundausrichtungen (alle 90° gedreht):
+//   0: H nach unten-links + unten-rechts  (ea = -π/2,  H bei -37° und -143°)
+//   1: H nach oben-rechts + unten-rechts  (ea = 0,     H bei +53° und -53°)
+//   2: H nach oben-links  + oben-rechts   (ea = +π/2,  H bei +143° und +37°)
+//   3: H nach oben-links  + unten-links   (ea = π,     H bei +127° und -127°... )
+//
+// Aber das Bild zeigt eigentlich EIN dominantes Muster:
+// Alle O haben H links+rechts oder oben+unten – nicht schräg.
+// Korrekte Interpretation des Bildes:
+//   Typ A: ea = 0      → H rechts-oben (+53°) und rechts-unten (-53°)
+//   Typ B: ea = -π/2   → H unten-rechts (-37°) und unten-links (-143°)  
+//   oder einfacher: alle Moleküle ea=0, abwechselnd gespiegelt
+//
+// NEUE STRATEGIE: Ich baue das Gitter exakt wie im Bild –
+// Honeycomb aber mit VIER verschiedenen Molekülorientierungen
+// die das Muster aus dem Bild erzeugen.
+//
+// Im Bild: Jedes Molekül hat O in der Mitte, 2H kovalent, und ist mit
+// genau 2 Nachbarn über H-Brücken verbunden (H→O).
+// Die Orientierungen rotieren im Gitter so, dass immer H auf O trifft.
+
+function bautGitter(w, h) {
+  const D   = 62;   // O–O Abstand entlang H-Brücke
+  const ROH = 0.92; // Halber Öffnungswinkel H-O-H in rad (zeichneMolKlein)
+
+  // Wabengitter: a1=(D*√3,0), a2=(D*√3/2, D*1.5), Basis A=(0,0) B=(D*√3/2, D*0.5)
+  const nC = Math.ceil(w / (D * S3)) + 2;
+  const nR = Math.ceil(h / (D * 1.5)) + 2;
+  const ox = 28, oy = 28;
+
+  const pts = [];
+  for (let row = 0; row < nR; row++) {
+    for (let col = 0; col < nC; col++) {
+      const ax = ox + col * D * S3 + (row % 2) * D * S3 / 2;
+      const ay = oy + row * D * 1.5;
+      if (ax > 4 && ax < w - 4 && ay > 4 && ay < h - 4)
+        pts.push({ x: ax, y: ay, typ: 'A', row, col });
+      const bx = ax + D * S3 / 2;
+      const by = ay + D * 0.5;
+      if (bx > 4 && bx < w - 4 && by > 4 && by < h - 4)
+        pts.push({ x: bx, y: by, typ: 'B', row, col });
+    }
+  }
+
+  // Nachbarn (Abstand ≈ D)
+  for (let i = 0; i < pts.length; i++) {
+    pts[i].nb = [];
+    for (let j = 0; j < pts.length; j++) {
+      if (i === j) continue;
+      const dx = pts[j].x - pts[i].x, dy = pts[j].y - pts[i].y;
+      if (Math.sqrt(dx*dx + dy*dy) < D * 1.18) pts[i].nb.push(j);
+    }
+  }
+
+  // Molekülwinkel: 
+  // Im Honeycomb-Gitter hat jede Kante eine Richtung. 
+  // Wir wollen: H des Donors zeigt EXAKT in Richtung des Akzeptor-O.
+  // Jedes Molekül doniert über 2 H-Atome → 2 der 3 Nachbarn bekommen eine H-Brücke.
+  // Die Auswahl: pro A-Knoten gehen H-Brücken zu 2 B-Nachbarn,
+  //              pro B-Knoten gehen H-Brücken zu 2 A-Nachbarn.
+  // ── Kanten + Winkel in einem Schritt ──
+  // Strategie: Wir setzen feste Grundwinkel (A nach unten, B nach oben),
+  // prüfen dann geometrisch welche Nachbarn von einem H getroffen werden,
+  // und beschränken auf max 2 ausgehend / max 2 eingehend.
+  // Moleküle die nur 1 H-Brücke donieren sind erlaubt (Randmoleküle, unvollständiges Gitter).
+
+  // Korrekte Grundwinkel basierend auf tatsächlicher Honeycomb-Geometrie:
+  // A-Nachbarn liegen bei -90°, +150°, +30°
+  // Mit ea=-30°: H1 bei +23° (≈+30°) und H2 bei -83° (≈-90°) → 2 Treffer ✓
+  // B-Nachbarn liegen bei -150°, -30°, +90°
+  // Mit ea=+150°: H1 bei +203° und H2 bei +97° → trifft +90° und -150° ✓
+  const EA_A = -Math.PI / 6;        // -30°
+  const EA_B =  Math.PI * 5 / 6;    // +150°
+
+  pts.forEach(p => { p.ea = p.typ === 'A' ? EA_A : EA_B; });
+
+  const akzCount   = new Array(pts.length).fill(0);
+  const donorCount = new Array(pts.length).fill(0);
+  const eisKanten  = [];
+
+  // Für jedes Molekül: welche H-Richtungen hat es, und welcher Nachbar liegt am nächsten daran?
+  pts.forEach((p, i) => {
+    const hDirs = [p.ea + ROH, p.ea - ROH]; // zwei H-Richtungen
+
+    hDirs.forEach((hDir) => {
+      // Finde den Nachbarn dessen Richtung am nächsten an hDir liegt
+      let bestJ = -1, bestDiff = Infinity;
+      p.nb.forEach(j => {
+        const dirZuJ = Math.atan2(pts[j].y - p.y, pts[j].x - p.x);
+        let diff = Math.abs(hDir - dirZuJ);
+        while (diff > Math.PI) diff = Math.abs(diff - 2 * Math.PI);
+        if (diff < bestDiff) { bestDiff = diff; bestJ = j; }
+      });
+
+      // H-Brücke nur wenn der beste Nachbar wirklich in H-Richtung liegt (max 50°)
+      if (bestJ >= 0 && bestDiff < 0.88 && donorCount[i] < 2 && akzCount[bestJ] < 2) {
+        // Prüfe ob diese Kante nicht schon existiert
+        const exists = eisKanten.some(k => k.donor === i && k.akz === bestJ);
+        if (!exists) {
+          eisKanten.push({ donor: i, akz: bestJ });
+          donorCount[i]++;
+          akzCount[bestJ]++;
+        }
+      }
+    });
+  });
+
+  // Winkel bleiben wie gesetzt (EA_A / EA_B) – keine Nachkorrektur nötig
+  // da die H-Brücken geometrisch zu den Winkeln passen
+
+  // Flüssig-Positionen
+  const mols = [];
+  pts.forEach((p) => {
+    let cx = p.x, cy = p.y;
+    if (p.nb.length > 0) {
+      cx = p.nb.reduce((s, j) => s + pts[j].x, 0) / p.nb.length;
+      cy = p.nb.reduce((s, j) => s + pts[j].y, 0) / p.nb.length;
+    }
+    const vx = p.x + (cx - p.x) * 0.38;
+    const vy = p.y + (cy - p.y) * 0.38;
+    const wx = p.x + (cx - p.x) * 0.12 + (r() - 0.5) * 22;
+    const wy = p.y + (cy - p.y) * 0.12 + (r() - 0.5) * 22;
+
+    mols.push({
+      ex: p.x, ey: p.y, ea: p.ea,
+      vx: Math.max(10, Math.min(w-10, vx)),
+      vy: Math.max(10, Math.min(h-10, vy)),
+      wx: Math.max(10, Math.min(w-10, wx)),
+      wy: Math.max(10, Math.min(h-10, wy)),
+      va: r() * Math.PI * 2,
+      wa: r() * Math.PI * 2,
+      amp4:  1.0 + r() * 0.8,
+      amp30: 2.8 + r() * 2.2,
+      ph:  r() * Math.PI * 2,
+      sp:  0.5 + r() * 0.5,
+      fph: r() * Math.PI * 2,
+      fsp: 0.25 + r() * 0.35,
+      nb: p.nb
+    });
+  });
+
+  mols._eisKanten = eisKanten;
+  mols._pts = pts;
+  return mols;
+}
+
+function aktualisiereSchmelze(val) {
+  schmelzTemp = parseInt(val);
+  const slider = document.getElementById('schmelzSlider');
+  const pct = ((schmelzTemp - (-5)) / 35) * 100;
+  slider.style.setProperty('--val', pct+'%');
+  document.getElementById('schmelzTempAnzeige').textContent =
+    schmelzTemp < 0 ? schmelzTemp : (schmelzTemp === 0 ? '0' : '+'+schmelzTemp);
+
+  const badge  = document.getElementById('zustandBadge');
+  const label  = document.getElementById('zustandLabel');
+  const dLabel = document.getElementById('dichteLabel');
+  const info   = document.getElementById('schmelzInfo');
+
+  if (schmelzTemp <= 0) {
+    badge.style.background='#3bb273'; badge.textContent='🧊 Eis';
+    label.textContent = schmelzTemp<0 ? `Eis (${schmelzTemp}°C)` : 'Eis (0°C) – Schmelzpunkt';
+    dLabel.textContent = 'Dichte: ~917 g/L';
+    info.innerHTML = 'Im <strong>Eis</strong> sind alle Moleküle durch H-Brücken in einem hexagonalen Gitter fixiert. Die <strong>Hohlräume</strong> machen Eis weniger dicht als Wasser.';
+  } else if (schmelzTemp <= 4) {
+    badge.style.background='#2d7dd2'; badge.textContent='💧 Flüssig';
+    label.textContent = schmelzTemp===4 ? 'Wasser (4°C) – höchste Dichte' : `Wasser (${schmelzTemp}°C) – schmilzt`;
+    dLabel.textContent = `Dichte: ~${Math.round(lerp(917,999.97,(schmelzTemp)/4))} g/L`;
+    info.innerHTML = 'Das Gitter bricht auf: Moleküle gleiten in die <strong>Hohlräume</strong> → sie rücken <strong>dichter zusammen</strong>. Bei 4°C ist die Dichte am höchsten. H-Brücken bestehen, aber ungeordnet.';
+  } else {
+    badge.style.background='#f0a500'; badge.textContent='💧 Warm';
+    label.textContent = `Wasser (${schmelzTemp}°C)`;
+    const d = Math.round(lerp(999.97, 995.65, (schmelzTemp-4)/26));
+    dLabel.textContent = `Dichte: ~${d} g/L`;
+    info.innerHTML = `Bei ${schmelzTemp}°C bewegen sich die Moleküle <strong>schneller</strong>. H-Brücken reißen häufiger ab. Der Abstand steigt → <strong>Dichte nimmt ab</strong>.`;
+  }
+}
+
+function zeichneSchmelze() {
+  const canvas = document.getElementById('schmelzCanvas');
+  if (!canvas) return;
+  const {ctx,w,h} = setupCanvas(canvas);
+
+  if (!schmelzMols || schmelzMols._w!==w || schmelzMols._h!==h) {
+    rv=0;
+    schmelzMols = bautGitter(w,h);
+    schmelzMols._w=w; schmelzMols._h=h;
+  }
+
+  const T = schmelzTemp;
+
+  // Drei saubere Phasen:
+  // −5 bis 0°C: IMMER perfektes Gitter, kein Unterschied (tMelt=0, tWarm=0)
+  // 0 bis 4°C:  Gitter bricht auf → Moleküle rutschen enger zusammen (tMelt: 0→1)
+  // 4 bis 30°C: Wärmebewegung → Moleküle weiter auseinander (tWarm: 0→1)
+
+  const tMelt = T > 0 && T <= 4 ? ease(T / 4) : (T > 4 ? 1 : 0);
+  const tWarm = T > 4 ? ease((T - 4) / 26) : 0;
+  const imEis = T <= 0;  // -5 bis 0: identisch, perfektes Gitter
+
+  // Animationsgeschwindigkeit: im Eis sehr langsam, bei 30°C schnell
+  schmelzPhase += imEis ? 0.008 : 0.015 + tWarm * 0.04;
+
+  ctx.fillStyle='#0d1b2a';
+  ctx.fillRect(0,0,w,h);
+
+  const N = schmelzMols.length;
+  const R_O = 9;
+
+  // ── Positionen ──
+  const pos = schmelzMols.map(m => {
+    let x, y, angle;
+
+    if (imEis || tMelt === 0) {
+      // Perfektes Eis-Gitter: nur mikroskopisches Zittern
+      const zitter = 0.6;
+      x = m.ex + Math.sin(schmelzPhase * m.sp + m.ph) * zitter;
+      y = m.ey + Math.cos(schmelzPhase * m.sp * 0.8 + m.ph) * zitter;
+      angle = m.ea;
+    } else if (tWarm === 0) {
+      // Schmelzphase 0→4°C: Gitter → dichte Packung
+      const wackel = tMelt * m.amp4;
+      x = lerp(m.ex, m.vx, tMelt) + Math.sin(schmelzPhase * m.sp + m.ph) * wackel;
+      y = lerp(m.ey, m.vy, tMelt) + Math.cos(schmelzPhase * m.sp * 0.8 + m.ph) * wackel;
+      angle = lerp(m.ea, m.va, tMelt);
+    } else {
+      // Warm 4→30°C: dichte Packung → auseinander
+      const wackel = m.amp4 + tWarm * m.amp30;
+      x = lerp(m.vx, m.wx, tWarm) + Math.sin(schmelzPhase * m.sp + m.ph) * wackel;
+      y = lerp(m.vy, m.wy, tWarm) + Math.cos(schmelzPhase * m.sp * 0.8 + m.ph) * wackel;
+      angle = lerp(m.va, m.wa, tWarm);
+    }
+
+    return { x, y, angle,
+      flicker: (Math.sin(schmelzPhase * m.fsp + m.fph) + 1) * 0.5
+    };
+  });
+
+  // ── Soft Repulsion ──
+  const MIN_DIST = 24;
+  for (let iter = 0; iter < 3; iter++) {
+    for (let i = 0; i < N; i++) {
+      for (let j = i + 1; j < N; j++) {
+        const dx = pos[j].x - pos[i].x, dy = pos[j].y - pos[i].y;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d > 0 && d < MIN_DIST) {
+          const push = (MIN_DIST - d) / 2 / d;
+          pos[i].x -= dx*push; pos[i].y -= dy*push;
+          pos[j].x += dx*push; pos[j].y += dy*push;
+        }
+      }
+    }
+  }
+
+  // ── H-Brücken zeichnen ──
+  ctx.setLineDash([5, 3]);
+  const H_D2 = R_O * 1.85;
+
+  if (imEis || tMelt < 0.05) {
+    // EIS: H-Brücken direkt aus vorberechneten Donor/Akzeptor-Kanten
+    // Jede Kante: Donor-H → Akzeptor-O (nie umgekehrt)
+    schmelzMols._eisKanten.forEach(k => {
+      const pd = pos[k.donor]; // Donor-Molekül (Typ A)
+      const pa = pos[k.akz];  // Akzeptor-Molekül (Typ B)
+      // Beide H-Positionen des Donors
+      const hPos = [pd.angle + 0.92, pd.angle - 0.92].map(a => ({
+        x: pd.x + H_D2 * Math.cos(a),
+        y: pd.y + H_D2 * Math.sin(a)
+      }));
+      // Nimm das H das am nächsten am Akzeptor-O liegt
+      const hNah = hPos[0] && hPos[1]
+        ? (Math.hypot(pa.x - hPos[0].x, pa.y - hPos[0].y) <
+           Math.hypot(pa.x - hPos[1].x, pa.y - hPos[1].y) ? hPos[0] : hPos[1])
+        : hPos[0];
+      ctx.strokeStyle = 'rgba(100,210,255,0.88)';
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.moveTo(hNah.x, hNah.y);
+      ctx.lineTo(pa.x, pa.y);
+      ctx.stroke();
+    });
+  } else {
+    // WASSER: Kandidaten-Algorithmus, max 2 Donor / 2 Akzeptor
+    const maxOO = lerp(62, 44, Math.min(1, tMelt + tWarm*0.5));
+    const donorZ = new Array(N).fill(0);
+    const akzZ   = new Array(N).fill(0);
+    const hbKand = [];
+    for (let i=0; i<N; i++) {
+      const pi=pos[i];
+      const hPos=[pi.angle+0.92,pi.angle-0.92].map(a=>({x:pi.x+H_D2*Math.cos(a),y:pi.y+H_D2*Math.sin(a)}));
+      for (let j=0; j<N; j++) {
+        if (j===i) continue;
+        const pj=pos[j];
+        const doo=Math.hypot(pj.x-pi.x,pj.y-pi.y);
+        if (doo>maxOO) continue;
+        const alpha=tWarm>0 ? 0.22+pos[i].flicker*0.22 : lerp(0.82,0.35+pos[i].flicker*0.3,tMelt);
+        hPos.forEach(h=>{
+          const dho=Math.hypot(pj.x-h.x,pj.y-h.y);
+          if (dho<doo*0.88) hbKand.push({donor:i,akz:j,hx:h.x,hy:h.y,dho,alpha});
+        });
+      }
+    }
+    hbKand.sort((a,b)=>a.dho-b.dho);
+    for (const k of hbKand) {
+      if (donorZ[k.donor]>=2||akzZ[k.akz]>=2) continue;
+      donorZ[k.donor]++; akzZ[k.akz]++;
+      ctx.strokeStyle=`rgba(100,200,255,${k.alpha})`; ctx.lineWidth=1.3;
+      ctx.beginPath(); ctx.moveTo(k.hx,k.hy); ctx.lineTo(pos[k.akz].x,pos[k.akz].y); ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]);
+
+  // ── Moleküle zeichnen ──
+  pos.forEach(p => zeichneMolKlein(ctx, p.x, p.y, p.angle, R_O));
+}
+
+function schmelzLoop() {
+  zeichneSchmelze();
+  schmelzAnimId = requestAnimationFrame(schmelzLoop);
+}
+
+// ==================== INIT ====================
+window.addEventListener('load', () => {
+  aktualisiereTemp(10);
+  zeichneZustandsMolekuele('fluessig');
+  aktualisiereSchmelze(-5);
+  schmelzLoop();
+});
+
+window.addEventListener('resize', () => {
+  schmelzMols = null;
+  const tab = document.querySelector('.tab-panel.aktiv');
+  if (tab.id==='panel0') {
+    zeichneDichteKurve(aktuelleTemp);
+    zeichneZustandsMolekuele(aktuellerZustand);
+  } else {
+    zeichneHBErklaerung();
+  }
+});
+</script>
+</body>
+</html>
