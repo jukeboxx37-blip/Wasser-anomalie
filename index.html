@@ -44,7 +44,7 @@
 
   .slider-wrap { margin: 12px 0; }
   .slider-wrap label { font-size: 0.82rem; color: var(--grau); display: block; margin-bottom: 6px; }
-  .slider-wrap input[type=range] { width: 100%; height: 6px; border-radius: 3px; appearance: none; background: linear-gradient(to right, var(--hellblau) 0%, var(--hellblau) var(--val,50%), var(--border) var(--val,50%)); outline: none; cursor: pointer; }
+  .slider-wrap input[type=range] { width: 100%; height: 6px; border-radius: 3px; appearance: none; background: linear-gradient(to right, var(--hellblau) 0%, var(--hellblau) var(--val,50%), var(--border) var(--val,50%)); outline: none; cursor: pointer; touch-action: none; }
   .slider-wrap input[type=range]::-webkit-slider-thumb { appearance: none; width: 28px; height: 28px; border-radius: 50%; background: var(--hellblau); border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; }
   .wert-anzeige { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
   .wert-gross { font-size: 1.5rem; font-weight: bold; color: var(--hellblau); }
@@ -242,18 +242,18 @@
 function dpr() { return Math.min(window.devicePixelRatio || 1, 2); }
 
 // Canvas-Cache: nicht jedes Frame neu skalieren
-let _canvasCache = null;
+const _canvasCaches = new WeakMap();
 function setupCanvasCached(canvas) {
-  const d = dpr();
-  const w = canvas.parentElement.clientWidth || 320;
+  const d = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.floor(canvas.parentElement.clientWidth || 320);
   const cssH = parseInt(canvas.getAttribute('height'));
-  // Nur neu skalieren wenn sich Größe geändert hat
-  if (!_canvasCache || _canvasCache.w !== w || _canvasCache.h !== cssH) {
+  const cache = _canvasCaches.get(canvas);
+  if (!cache || cache.w !== w || cache.h !== cssH || cache.d !== d) {
     canvas.width = w * d;
     canvas.height = cssH * d;
     canvas.style.width = w + 'px';
     canvas.style.height = cssH + 'px';
-    _canvasCache = { w, h: cssH };
+    _canvasCaches.set(canvas, { w, h: cssH, d });
   }
   const ctx = canvas.getContext('2d');
   ctx.setTransform(d, 0, 0, d, 0, 0);
@@ -922,6 +922,7 @@ window.addEventListener('load', () => {
 
 window.addEventListener('resize', () => {
   schmelzMols = null;
+  _lastTemp = null;
   const tab = document.querySelector('.tab-panel.aktiv');
   if (tab.id==='panel0') {
     zeichneDichteKurve(aktuelleTemp);
