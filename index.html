@@ -241,16 +241,22 @@
 // ==================== HILFSFUNKTIONEN ====================
 function dpr() { return Math.min(window.devicePixelRatio || 1, 2); }
 
-function setupCanvas(canvas) {
+// Canvas-Cache: nicht jedes Frame neu skalieren
+let _canvasCache = null;
+function setupCanvasCached(canvas) {
   const d = dpr();
   const w = canvas.parentElement.clientWidth || 320;
   const cssH = parseInt(canvas.getAttribute('height'));
-  canvas.width = w * d;
-  canvas.height = cssH * d;
-  canvas.style.width = w + 'px';
-  canvas.style.height = cssH + 'px';
+  // Nur neu skalieren wenn sich Größe geändert hat
+  if (!_canvasCache || _canvasCache.w !== w || _canvasCache.h !== cssH) {
+    canvas.width = w * d;
+    canvas.height = cssH * d;
+    canvas.style.width = w + 'px';
+    canvas.style.height = cssH + 'px';
+    _canvasCache = { w, h: cssH };
+  }
   const ctx = canvas.getContext('2d');
-  ctx.scale(d, d);
+  ctx.setTransform(d, 0, 0, d, 0, 0);
   return { ctx, w, h: cssH };
 }
 
@@ -291,7 +297,7 @@ function aktualisiereTemp(val) {
 
 function zeichneDichteKurve(temp) {
   const canvas = document.getElementById('dichteCanvas');
-  const { ctx, w, h } = setupCanvas(canvas);
+  const { ctx, w, h } = setupCanvasCached(canvas);
   const pad = { l:52, r:16, t:18, b:36 };
   const cw = w-pad.l-pad.r, ch = h-pad.t-pad.b;
   const yMin=997.5, yMax=1000.2;
@@ -365,7 +371,7 @@ function zeigeZustand(z,btn) {
 
 function zeichneZustandsMolekuele(z) {
   const canvas = document.getElementById('zustandCanvas');
-  const { ctx, w, h } = setupCanvas(canvas);
+  const { ctx, w, h } = setupCanvasCached(canvas);
   ctx.fillStyle='#0d1b2a'; ctx.fillRect(0,0,w,h);
   let pos=[];
   if (z==='fluessig') {
@@ -403,7 +409,7 @@ function zeichneMolKlein(ctx,x,y,a,r) {
 // ==================== MODUL 2: H-BRÜCKE ERKLÄRUNG ====================
 function zeichneHBErklaerung() {
   const canvas = document.getElementById('hbErklaerCanvas');
-  const { ctx, w, h } = setupCanvas(canvas);
+  const { ctx, w, h } = setupCanvasCached(canvas);
   ctx.fillStyle='#0d1b2a'; ctx.fillRect(0,0,w,h);
 
   const m1x=w*0.27, m2x=w*0.73, my=h*0.52;
@@ -731,7 +737,7 @@ function aktualisiereSchmelze(val) {
 function zeichneSchmelze() {
   const canvas = document.getElementById('schmelzCanvas');
   if (!canvas) return;
-  const {ctx,w,h} = setupCanvas(canvas);
+  const {ctx,w,h} = setupCanvasCached(canvas);
 
   if (!schmelzMols || schmelzMols._w!==w || schmelzMols._h!==h) {
     rv=0;
@@ -788,14 +794,16 @@ function zeichneSchmelze() {
     };
   });
 
-  // ── Soft Repulsion ──
-  const MIN_DIST = 24;
-  for (let iter = 0; iter < 3; iter++) {
+  // ── Soft Repulsion: nur im Wasser und nur 1 Iteration ──
+  // Im Eis: Gitterpositionen sind von Natur aus kollisionsfrei → skip
+  if (!imEis && tMelt > 0.1) {
+    const MIN_DIST = 22;
     for (let i = 0; i < N; i++) {
       for (let j = i + 1; j < N; j++) {
         const dx = pos[j].x - pos[i].x, dy = pos[j].y - pos[i].y;
-        const d = Math.sqrt(dx*dx + dy*dy);
-        if (d > 0 && d < MIN_DIST) {
+        const d2 = dx*dx + dy*dy;
+        if (d2 > 0 && d2 < MIN_DIST * MIN_DIST) {
+          const d = Math.sqrt(d2);
           const push = (MIN_DIST - d) / 2 / d;
           pos[i].x -= dx*push; pos[i].y -= dy*push;
           pos[j].x += dx*push; pos[j].y += dy*push;
@@ -832,26 +840,48 @@ function zeichneSchmelze() {
       ctx.stroke();
     });
   } else {
-    // WASSER: Kandidaten-Algorithmus, max 2 Donor / 2 Akzeptor
+    // WASSER: räumliches Gitter für O(n) statt O(n²)
     const maxOO = lerp(62, 44, Math.min(1, tMelt + tWarm*0.5));
     const donorZ = new Array(N).fill(0);
     const akzZ   = new Array(N).fill(0);
     const hbKand = [];
-    for (let i=0; i<N; i++) {
-      const pi=pos[i];
-      const hPos=[pi.angle+0.92,pi.angle-0.92].map(a=>({x:pi.x+H_D2*Math.cos(a),y:pi.y+H_D2*Math.sin(a)}));
-      for (let j=0; j<N; j++) {
-        if (j===i) continue;
-        const pj=pos[j];
-        const doo=Math.hypot(pj.x-pi.x,pj.y-pi.y);
-        if (doo>maxOO) continue;
-        const alpha=tWarm>0 ? 0.22+pos[i].flicker*0.22 : lerp(0.82,0.35+pos[i].flicker*0.3,tMelt);
-        hPos.forEach(h=>{
-          const dho=Math.hypot(pj.x-h.x,pj.y-h.y);
-          if (dho<doo*0.88) hbKand.push({donor:i,akz:j,hx:h.x,hy:h.y,dho,alpha});
-        });
+
+    // Räumliches Gitter: Zellgröße = maxOO
+    const cellSize = maxOO;
+    const gridW = Math.ceil(w / cellSize) + 1;
+    const grid = new Map();
+    pos.forEach((p, i) => {
+      const cx = Math.floor(p.x / cellSize), cy = Math.floor(p.y / cellSize);
+      const key = cx * 1000 + cy;
+      if (!grid.has(key)) grid.set(key, []);
+      grid.get(key).push(i);
+    });
+
+    pos.forEach((pi, i) => {
+      const hPos = [pi.angle+0.92, pi.angle-0.92].map(a=>({
+        x: pi.x + H_D2*Math.cos(a), y: pi.y + H_D2*Math.sin(a)
+      }));
+      const cx = Math.floor(pi.x / cellSize), cy = Math.floor(pi.y / cellSize);
+      // Nur benachbarte Zellen prüfen
+      for (let dcx = -1; dcx <= 1; dcx++) {
+        for (let dcy = -1; dcy <= 1; dcy++) {
+          const neighbors = grid.get((cx+dcx)*1000 + (cy+dcy));
+          if (!neighbors) continue;
+          neighbors.forEach(j => {
+            if (j === i) return;
+            const pj = pos[j];
+            const doo = Math.hypot(pj.x-pi.x, pj.y-pi.y);
+            if (doo > maxOO) return;
+            const alpha = tWarm>0 ? 0.22+pi.flicker*0.22 : lerp(0.75,0.35+pi.flicker*0.3,tMelt);
+            hPos.forEach(h => {
+              const dho = Math.hypot(pj.x-h.x, pj.y-h.y);
+              if (dho < doo*0.88) hbKand.push({donor:i,akz:j,hx:h.x,hy:h.y,dho,alpha});
+            });
+          });
+        }
       }
-    }
+    });
+
     hbKand.sort((a,b)=>a.dho-b.dho);
     for (const k of hbKand) {
       if (donorZ[k.donor]>=2||akzZ[k.akz]>=2) continue;
@@ -866,8 +896,19 @@ function zeichneSchmelze() {
   pos.forEach(p => zeichneMolKlein(ctx, p.x, p.y, p.angle, R_O));
 }
 
+let _lastFrame = 0;
+let _lastTemp = null;
 function schmelzLoop() {
-  zeichneSchmelze();
+  const now = performance.now();
+  const T = schmelzTemp;
+  // Im Eis (T≤0): nur zeichnen wenn Temperatur sich geändert hat – spart ~100% CPU
+  const tempChanged = T !== _lastTemp;
+  const brauchtAnimation = T > 0; // nur flüssig braucht kontinuierliche Animation
+  if (brauchtAnimation ? (now - _lastFrame >= 33) : tempChanged) {
+    _lastFrame = now;
+    _lastTemp = T;
+    zeichneSchmelze();
+  }
   schmelzAnimId = requestAnimationFrame(schmelzLoop);
 }
 
